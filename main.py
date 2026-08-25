@@ -25,11 +25,16 @@ async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     return member.status in ['creator', 'administrator']
 
 async def get_target_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # 1. Reply
+    # 1. Check Reply
     if update.message.reply_to_message:
         return update.message.reply_to_message.from_user
 
-    # 2. User ID
+    # 2. Check Mention Entity (کاتێک بە تاگ ناوەکەی هەڵدەبژێریت)
+    for entity in update.message.entities:
+        if entity.type == "text_mention":
+            return entity.user
+
+    # 3. Check Arguments (ID یان @username)
     if context.args:
         arg = context.args[0]
         if arg.isdigit():
@@ -39,6 +44,7 @@ async def get_target_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return chat_member.user
             except Exception:
                 pass
+
     return None
 
 async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -68,7 +74,7 @@ async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     target = await get_target_user(update, context)
     if not target:
-        await update.message.reply_text("تکایە **ریپلایی** پەیامی کەسەکە بکە!")
+        await update.message.reply_text("تکایە ریپلایی پەیامەکە بکە یان تاگی بکە (ناوی لە لیستی تاگ هەڵبژێرە).")
         return
 
     chat_id = update.effective_chat.id
@@ -88,7 +94,7 @@ async def mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     target = await get_target_user(update, context)
     if not target:
-        await update.message.reply_text("تکایە **ریپلایی** پەیامی کەسەکە بکە!")
+        await update.message.reply_text("تکایە ریپلایی پەیامەکە بکە یان تاگی بکە.")
         return
 
     chat_id = update.effective_chat.id
@@ -100,7 +106,7 @@ async def unmute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     target = await get_target_user(update, context)
     if not target:
-        await update.message.reply_text("تکایە **ریپلایی** پەیامی کەسەکە بکە!")
+        await update.message.reply_text("تکایە ریپلایی پەیامەکە بکە یان تاگی بکە.")
         return
 
     chat_id = update.effective_chat.id
@@ -120,7 +126,7 @@ async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     target = await get_target_user(update, context)
     if not target:
-        await update.message.reply_text("تکایە **ریپلایی** پەیامی کەسەکە بکە!")
+        await update.message.reply_text("تکایە ریپلایی پەیامەکە بکە یان تاگی بکە.")
         return
 
     await context.bot.ban_chat_member(update.effective_chat.id, target.id)
