@@ -1,5 +1,8 @@
 import logging
 import sqlite3
+import os
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import threading
 from telegram import Update, ChatPermissions
 from telegram.ext import (
     ApplicationBuilder,
@@ -10,6 +13,19 @@ from telegram.ext import (
     filters,
 )
 
+# --- Dummy Web Server for Render Port Binding ---
+class SimpleHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is running successfully!")
+
+def run_web_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(('0.0.0.0', port), SimpleHandler)
+    server.serve_forever()
+# ------------------------------------------------
+
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -17,7 +33,6 @@ logging.basicConfig(
 
 TOKEN = "8850800726:AAHIOfK2PYkXoy6AJMs86Ruo_DjJW7KS8yY"
 
-# لیستی وشە قەدەغەکراوەکان (دەتوانیت وشەی تریشی بۆ زیاد بکەیت)
 BAD_WORDS = ["کەر", "جندۆکە", "سەگ", "bitch", "fuck"]
 
 # ----------------- Database Setup -----------------
@@ -97,10 +112,9 @@ async def get_target_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     return None, None
 
-# --- Help Command (فەرمانی ڕێنمایی تایبەت بە ئەدمینان) ---
 async def admin_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
-        return  # تەنها ئەدمینەکان دەتوانن بیبینن
+        return
 
     help_text = (
         "🛠 **ڕێنمایی بەکارهێنانی فەرمانەکانی ئەدمین (Night Vibes Bot)**\n\n"
@@ -243,7 +257,6 @@ async def unban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.unban_chat_member(update.effective_chat.id, user_id, only_if_banned=True)
     await update.message.reply_text(f"🔓 **{name}** لە بان دەرهێنرا!", parse_mode="Markdown")
 
-# --- Control Group Lock/Unlock ---
 async def lock_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         return
@@ -263,7 +276,6 @@ async def unlock_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text("🔓 **چاتی گروپ کرایەوە!** هەمووان دەتوانن بنووسن.", parse_mode="Markdown")
 
-# --- Purge Messages ---
 async def purge_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         return
@@ -281,7 +293,6 @@ async def purge_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             pass
 
-# --- Show Stats ---
 async def get_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         return
@@ -310,13 +321,11 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.lower() if update.message.text else ""
 
     if not await is_admin(update, context):
-        # Anti Link Filter
         if "http://" in text or "https://" in text or "t.me/" in text:
             await update.message.delete()
             await update.message.reply_text(f"⚠️ **{user.first_name}** ناردنی لینک ڕێگەپێنەدراوە!", parse_mode="Markdown")
             return
 
-        # Bad Words Filter
         for word in BAD_WORDS:
             if word in text:
                 await update.message.delete()
@@ -327,6 +336,9 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"سڵاو لە تۆش {user.first_name} گیان! بەخێربێیت 🌹")
 
 def main():
+    # دەستپێکردنی سێرڤەری کاتی لە فۆنکشنێکی سەربەخۆ بۆ ئەوەی Render ڕازی بێت بە Port Binding
+    threading.Thread(target=run_web_server, daemon=True).start()
+
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome))
