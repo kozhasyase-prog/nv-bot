@@ -40,13 +40,14 @@ def init_db():
 def save_user(user_id: int, username: str, first_name: str):
     conn = sqlite3.connect('users.db')
     cursor = conn.cursor()
+    username_clean = username.lower() if username else None
     cursor.execute('''
         INSERT INTO users (user_id, username, first_name)
         VALUES (?, ?, ?)
         ON CONFLICT(user_id) DO UPDATE SET
             username = excluded.username,
             first_name = excluded.first_name
-    ''', (user_id, username.lower() if username else None, first_name))
+    ''', (user_id, username_clean, first_name))
     conn.commit()
     conn.close()
 
@@ -72,16 +73,17 @@ async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
 
 async def get_target_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 1. Reply
-    if update.message.reply_to_message:
+    if update.message and update.message.reply_to_message:
         target = update.message.reply_to_message.from_user
         save_user(target.id, target.username, target.first_name)
         return target.id, target.first_name
 
     # 2. Text Mention Entity
-    for entity in update.message.entities:
-        if entity.type == "text_mention" and entity.user:
-            save_user(entity.user.id, entity.user.username, entity.user.first_name)
-            return entity.user.id, entity.user.first_name
+    if update.message and update.message.entities:
+        for entity in update.message.entities:
+            if entity.type == "text_mention" and entity.user:
+                save_user(entity.user.id, entity.user.username, entity.user.first_name)
+                return entity.user.id, entity.user.first_name
 
     # 3. Text Argument (@username yanyan ID)
     if context.args:
@@ -108,7 +110,6 @@ async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for member in members:
         if member.id == context.bot.id:
             continue
-        # Save user to DB when joining
         save_user(member.id, member.username, member.first_name)
         
         text = (
@@ -117,7 +118,7 @@ async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         if update.message:
             await update.message.reply_text(text, parse_mode="Markdown")
-        else:
+        elif update.chat_member:
             await context.bot.send_message(chat_id=update.chat_member.chat.id, text=text, parse_mode="Markdown")
 
 async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -162,7 +163,7 @@ async def unwarn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cursor.execute('DELETE FROM warnings WHERE user_id = ?', (user_id,))
     conn.commit()
     conn.close()
-    await update.message.reply_text(f"✅ هۆشدارییەکانی **{name}** سڕدرانەوە.", parse_mode="Markdown")
+    await update.message.reply_text(f"✅ هۆشدارییەکان لەسەر **{name}** لابردران.", parse_mode="Markdown")
 
 async def mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
@@ -223,7 +224,6 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     user = update.message.from_user
-    # Automatically save user info on every message sent!
     save_user(user.id, user.username, user.first_name)
 
     text = update.message.text.lower() if update.message.text else ""
