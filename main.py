@@ -52,7 +52,7 @@ async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await context.bot.send_message(chat_id=update.chat_member.chat.id, text=text, parse_mode="Markdown")
 
-# 2. Moderation Tools (/warn, /mute, /ban)
+# 2. Moderation Tools (/warn, /mute, /unmute, /ban)
 async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         return
@@ -86,6 +86,27 @@ async def mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await context.bot.restrict_chat_member(chat_id, target.id, permissions=ChatPermissions(can_send_messages=False))
     await update.message.reply_text(f"🔇 {target.mention_html()} بێدەنگ کرا!", parse_mode="HTML")
+
+async def unmute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update, context):
+        return
+    if not update.message.reply_to_message:
+        await update.message.reply_text("تکایە ریپلایی پەیامەکە بکە!")
+        return
+
+    target = update.message.reply_to_message.from_user
+    chat_id = update.effective_chat.id
+
+    await context.bot.restrict_chat_member(
+        chat_id, 
+        target.id, 
+        permissions=ChatPermissions(
+            can_send_messages=True,
+            can_send_other_messages=True,
+            can_add_web_page_previews=True
+        )
+    )
+    await update.message.reply_text(f"🔊 {target.mention_html()} ئازاد کرا و دەتوانێت پەیام بنێرێت!", parse_mode="HTML")
 
 async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
@@ -153,6 +174,7 @@ def main():
     # Command Handlers
     app.add_handler(CommandHandler("warn", warn_user))
     app.add_handler(CommandHandler("mute", mute_user))
+    app.add_handler(CommandHandler("unmute", unmute_user))
     app.add_handler(CommandHandler("ban", ban_user))
     app.add_handler(CommandHandler("purge", purge_messages))
 
