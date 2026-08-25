@@ -9,7 +9,6 @@ from telegram.ext import (
     filters,
 )
 
-# Logging Setup
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -17,45 +16,31 @@ logging.basicConfig(
 
 TOKEN = "8850800726:AAHIOfK2PYkXoy6AJMs86Ruo_DjJW7KS8yY"
 
-# Storage for warning counts
 user_warnings = {}
 
-# Helper to extract targeted user from Reply, Mention (@user), or User ID
-async def get_target_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # 1. Reply
-    if update.message.reply_to_message:
-        return update.message.reply_to_message.from_user
-
-    # 2. Argument (@username or ID)
-    if context.args:
-        arg = context.args[0]
-        # Mention like @username
-        if arg.startswith('@'):
-            username = arg[1:]
-            try:
-                chat_member = await context.bot.get_chat_member(update.effective_chat.id, arg)
-                return chat_member.user
-            except Exception:
-                pass
-        # Numeric User ID
-        elif arg.isdigit():
-            user_id = int(arg)
-            try:
-                chat_member = await context.bot.get_chat_member(update.effective_chat.id, user_id)
-                return chat_member.user
-            except Exception:
-                pass
-
-    return None
-
-# Check if user is Admin
 async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
     member = await context.bot.get_chat_member(chat_id, user_id)
     return member.status in ['creator', 'administrator']
 
-# 1. Advanced Welcome
+async def get_target_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # 1. Reply
+    if update.message.reply_to_message:
+        return update.message.reply_to_message.from_user
+
+    # 2. User ID
+    if context.args:
+        arg = context.args[0]
+        if arg.isdigit():
+            user_id = int(arg)
+            try:
+                chat_member = await context.bot.get_chat_member(update.effective_chat.id, user_id)
+                return chat_member.user
+            except Exception:
+                pass
+    return None
+
 async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
     members = []
     if update.message and update.message.new_chat_members:
@@ -69,30 +54,25 @@ async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for member in members:
         if member.id == context.bot.id:
             continue
-            
         text = (
             f"بەخێربێیت {member.full_name} بۆ گروپی **Night Vibes** 🌙\n\n"
             f"تکایە بۆ ئەوەی ببیتە ئەندامی فەرمی، تاگی `⌞NV⌝` بخەرە تەنیشت ناوەکەت."
         )
-        
         if update.message:
             await update.message.reply_text(text, parse_mode="Markdown")
         else:
             await context.bot.send_message(chat_id=update.chat_member.chat.id, text=text, parse_mode="Markdown")
 
-# 2. Moderation Tools (/warn, /mute, /unmute, /ban)
 async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         return
-    
     target = await get_target_user(update, context)
     if not target:
-        await update.message.reply_text("تکایە ریپلایی پەیامەکە بکە یان تاگی کەسەکە بکە (نموونە: `/warn @username`)")
+        await update.message.reply_text("تکایە **ریپلایی** پەیامی کەسەکە بکە!")
         return
 
     chat_id = update.effective_chat.id
     user_id = target.id
-
     user_warnings[user_id] = user_warnings.get(user_id, 0) + 1
     count = user_warnings[user_id]
 
@@ -106,10 +86,9 @@ async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         return
-
     target = await get_target_user(update, context)
     if not target:
-        await update.message.reply_text("تکایە ریپلایی پەیامەکە بکە یان تاگی کەسەکە بکە (نموونە: `/mute @username`)")
+        await update.message.reply_text("تکایە **ریپلایی** پەیامی کەسەکە بکە!")
         return
 
     chat_id = update.effective_chat.id
@@ -119,10 +98,9 @@ async def mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def unmute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         return
-
     target = await get_target_user(update, context)
     if not target:
-        await update.message.reply_text("تکایە ریپلایی پەیامەکە بکە یان تاگی کەسەکە بکە (نموونە: `/unmute @username`)")
+        await update.message.reply_text("تکایە **ریپلایی** پەیامی کەسەکە بکە!")
         return
 
     chat_id = update.effective_chat.id
@@ -140,16 +118,14 @@ async def unmute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         return
-
     target = await get_target_user(update, context)
     if not target:
-        await update.message.reply_text("تکایە ریپلایی پەیامەکە بکە یان تاگی کەسەکە بکە (نموونە: `/ban @username`)")
+        await update.message.reply_text("تکایە **ریپلایی** پەیامی کەسەکە بکە!")
         return
 
     await context.bot.ban_chat_member(update.effective_chat.id, target.id)
     await update.message.reply_text(f"🚫 {target.mention_html()} دەرکرا!", parse_mode="HTML")
 
-# 3. Purge Messages (/purge)
 async def purge_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         return
@@ -167,7 +143,6 @@ async def purge_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             pass
 
-# 4. Message Handler
 async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
@@ -175,14 +150,12 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.lower()
     user = update.message.from_user
 
-    # Anti-link Check
     if not await is_admin(update, context):
         if "http://" in text or "https://" in text or "t.me/" in text:
             await update.message.delete()
             await update.message.reply_text(f"⚠️ {user.mention_html()} ناردنی لینک ڕێگەپێنەدراوە!", parse_mode="HTML")
             return
 
-    # Auto-replies
     if "سڵاو" in text or "slaw" in text:
         await update.message.reply_text(f"سڵاو لە تۆش {user.first_name} گیان! بەخێربێیت 🌹")
     elif "یاساکان" in text or "rules" in text:
@@ -197,18 +170,15 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
-    # Handlers
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome))
     app.add_handler(ChatMemberHandler(welcome, ChatMemberHandler.CHAT_MEMBER))
 
-    # Command Handlers
     app.add_handler(CommandHandler("warn", warn_user))
     app.add_handler(CommandHandler("mute", mute_user))
     app.add_handler(CommandHandler("unmute", unmute_user))
     app.add_handler(CommandHandler("ban", ban_user))
     app.add_handler(CommandHandler("purge", purge_messages))
 
-    # General Text Handler
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_messages))
 
     print("Bot is running...")
