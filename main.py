@@ -17,6 +17,9 @@ logging.basicConfig(
 
 TOKEN = "8850800726:AAHIOfK2PYkXoy6AJMs86Ruo_DjJW7KS8yY"
 
+# لیستی وشە قەدەغەکراوەکان (دەتوانیت وشەی تریشی بۆ زیاد بکەیت)
+BAD_WORDS = ["کەر", "جندۆکە", "سەگ", "bitch", "fuck"]
+
 # ----------------- Database Setup -----------------
 def init_db():
     conn = sqlite3.connect('users.db')
@@ -72,20 +75,17 @@ async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     return member.status in ['creator', 'administrator']
 
 async def get_target_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # 1. Reply
     if update.message and update.message.reply_to_message:
         target = update.message.reply_to_message.from_user
         save_user(target.id, target.username, target.first_name)
         return target.id, target.first_name
 
-    # 2. Text Mention Entity
     if update.message and update.message.entities:
         for entity in update.message.entities:
             if entity.type == "text_mention" and entity.user:
                 save_user(entity.user.id, entity.user.username, entity.user.first_name)
                 return entity.user.id, entity.user.first_name
 
-    # 3. Text Argument (@username yanyan ID)
     if context.args:
         arg = context.args[0]
         if arg.isdigit():
@@ -96,6 +96,30 @@ async def get_target_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return user_id, first_name or arg
 
     return None, None
+
+# --- Help Command (فەرمانی ڕێنمایی تایبەت بە ئەدمینان) ---
+async def admin_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update, context):
+        return  # تەنها ئەدمینەکان دەتوانن بیبینن
+
+    help_text = (
+        "🛠 **ڕێنمایی بەکارهێنانی فەرمانەکانی ئەدمین (Night Vibes Bot)**\n\n"
+        "📌 **فەرمانەکانی بەڕێوەبردن (تەواوی تاگ یان ریپلای):**\n"
+        "• `/warn @username` - پێدانی هۆشداریی بە ئەندام (بە ٣ هۆشداری دەردەکرێت).\n"
+        "• `/unwarn @username` - سڕینەوەی هۆشدارییەکانی ئەندام.\n"
+        "• `/mute @username` - بێدەنگکردنی ئەندام لە پەیام ناردن.\n"
+        "• `/unmute @username` - لادانی بێدەنگی و ڕێگەدان بە پەیام ناردن.\n"
+        "• `/ban @username` - دەرکردنی ئۆتۆماتیکی ئەندام لە گروپ.\n"
+        "• `/unban @username` - لادانی بان و ڕێگەدان بە گەڕانەوەی ئەندام.\n\n"
+        "🔒 **کۆنترۆڵی گروپ و چات:**\n"
+        "• `/purge <ژمارە>` - سڕینەوەی ژمارەیەکی دیاریکراوی پەیامەکان (بۆ نموونە `/purge 10`).\n"
+        "• `/lock` - قوفڵکردنی چاتی گروپ (هیچ ئەندامێک ناتوانێت بنووسێت).\n"
+        "• `/unlock` - کردنەوەی چاتی گروپ بۆ ئەندامان.\n\n"
+        "📊 **ئامار و زانیاری:**\n"
+        "• `/stats` - پیشاندانی ژمارەی ئەندامە سەیڤکراوەکان و هۆشدارییەکان.\n"
+        "• `/help` - پیشاندانی ئەم ڕێنماییە (تەنها بە ئەدمین نیشان دەدرێت)."
+    )
+    await update.message.reply_text(help_text, parse_mode="Markdown")
 
 async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
     members = []
@@ -117,16 +141,18 @@ async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"تکایە بۆ ئەوەی ببیتە ئەندامی فەرمی، تاگی `⌞NV⌝` بخەرە تەنیشت ناوەکەت."
         )
         if update.message:
-            await update.message.reply_text(text, parse_mode="Markdown")
-        elif update.chat_member:
-            await context.bot.send_message(chat_id=update.chat_member.chat.id, text=text, parse_mode="Markdown")
+            msg = await update.message.reply_text(text, parse_mode="Markdown")
+            try:
+                await context.bot.pin_chat_message(update.effective_chat.id, msg.message_id)
+            except Exception:
+                pass
 
 async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         return
     user_id, name = await get_target_user(update, context)
     if not user_id:
-        await update.message.reply_text("کەسەکە دەستنەکەوت! تکایە تاگەکە بە دروستی بنووسە یان ریپلایی بکە.")
+        await update.message.reply_text("کەسەکە دەستنەکەوت! تاگەکەی بنووسە یان ریپلایی بکە.")
         return
 
     chat_id = update.effective_chat.id
@@ -173,8 +199,7 @@ async def mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("کەسەکە دەستنەکەوت!")
         return
 
-    chat_id = update.effective_chat.id
-    await context.bot.restrict_chat_member(chat_id, user_id, permissions=ChatPermissions(can_send_messages=False))
+    await context.bot.restrict_chat_member(update.effective_chat.id, user_id, permissions=ChatPermissions(can_send_messages=False))
     await update.message.reply_text(f"🔇 **{name}** بێدەنگ کرا!", parse_mode="Markdown")
 
 async def unmute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -182,12 +207,11 @@ async def unmute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     user_id, name = await get_target_user(update, context)
     if not user_id:
-        await update.message.reply_text("کەسەکە لە داتابەیج نەدۆزرایەوە! (دەبێت لانیکەم یەک پەیامی ناردبێت یان نوێ هاتبیێتە گروپەکە).")
+        await update.message.reply_text("کەسەکە لە داتابەیج نەدۆزرایەوە!")
         return
 
-    chat_id = update.effective_chat.id
     await context.bot.restrict_chat_member(
-        chat_id, 
+        update.effective_chat.id, 
         user_id, 
         permissions=ChatPermissions(
             can_send_messages=True,
@@ -195,7 +219,7 @@ async def unmute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
             can_add_web_page_previews=True
         )
     )
-    await update.message.reply_text(f"🔊 **{name}** ئازاد کرا و دەتوانێت پەیام بنێرێت!", parse_mode="Markdown")
+    await update.message.reply_text(f"🔊 **{name}** ئازاد کرا!", parse_mode="Markdown")
 
 async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
@@ -219,6 +243,63 @@ async def unban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.unban_chat_member(update.effective_chat.id, user_id, only_if_banned=True)
     await update.message.reply_text(f"🔓 **{name}** لە بان دەرهێنرا!", parse_mode="Markdown")
 
+# --- Control Group Lock/Unlock ---
+async def lock_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update, context):
+        return
+    await context.bot.set_chat_permissions(update.effective_chat.id, ChatPermissions(can_send_messages=False))
+    await update.message.reply_text("🔒 **چاتی گروپ قوفڵکرا!** تەنها ئەدمینەکان دەتوانن بنووسن.", parse_mode="Markdown")
+
+async def unlock_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update, context):
+        return
+    await context.bot.set_chat_permissions(
+        update.effective_chat.id, 
+        ChatPermissions(
+            can_send_messages=True,
+            can_send_other_messages=True,
+            can_add_web_page_previews=True
+        )
+    )
+    await update.message.reply_text("🔓 **چاتی گروپ کرایەوە!** هەمووان دەتوانن بنووسن.", parse_mode="Markdown")
+
+# --- Purge Messages ---
+async def purge_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update, context):
+        return
+    
+    count = 10
+    if context.args and context.args[0].isdigit():
+        count = int(context.args[0])
+
+    chat_id = update.effective_chat.id
+    current_id = update.message.message_id
+
+    for msg_id in range(current_id, current_id - count - 1, -1):
+        try:
+            await context.bot.delete_message(chat_id, msg_id)
+        except Exception:
+            pass
+
+# --- Show Stats ---
+async def get_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update, context):
+        return
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT COUNT(*) FROM users')
+    total_users = cursor.fetchone()[0]
+    cursor.execute('SELECT COUNT(*) FROM warnings')
+    total_warned = cursor.fetchone()[0]
+    conn.close()
+
+    await update.message.reply_text(
+        f"📊 **ئاماری گروپی Night Vibes:**\n\n"
+        f"👥 ئەندامە تۆمارکراوەکان لە داتابەیج: `{total_users}`\n"
+        f"⚠️ ئەو کەسانەی هۆشدارییان لەسەرە: `{total_warned}`",
+        parse_mode="Markdown"
+    )
+
 async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
@@ -229,10 +310,18 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.lower() if update.message.text else ""
 
     if not await is_admin(update, context):
+        # Anti Link Filter
         if "http://" in text or "https://" in text or "t.me/" in text:
             await update.message.delete()
             await update.message.reply_text(f"⚠️ **{user.first_name}** ناردنی لینک ڕێگەپێنەدراوە!", parse_mode="Markdown")
             return
+
+        # Bad Words Filter
+        for word in BAD_WORDS:
+            if word in text:
+                await update.message.delete()
+                await update.message.reply_text(f"🛑 **{user.first_name}** بەکارھێنانی وشەی نەشیاو قەدەغەیە!", parse_mode="Markdown")
+                return
 
     if "سڵاو" in text or "slaw" in text:
         await update.message.reply_text(f"سڵاو لە تۆش {user.first_name} گیان! بەخێربێیت 🌹")
@@ -243,16 +332,22 @@ def main():
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome))
     app.add_handler(ChatMemberHandler(welcome, ChatMemberHandler.CHAT_MEMBER))
 
+    # Commands
+    app.add_handler(CommandHandler("help", admin_help))
     app.add_handler(CommandHandler("warn", warn_user))
     app.add_handler(CommandHandler("unwarn", unwarn_user))
     app.add_handler(CommandHandler("mute", mute_user))
     app.add_handler(CommandHandler("unmute", unmute_user))
     app.add_handler(CommandHandler("ban", ban_user))
     app.add_handler(CommandHandler("unban", unban_user))
+    app.add_handler(CommandHandler("lock", lock_chat))
+    app.add_handler(CommandHandler("unlock", unlock_chat))
+    app.add_handler(CommandHandler("purge", purge_messages))
+    app.add_handler(CommandHandler("stats", get_stats))
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_messages))
 
-    print("Bot with Database is running...")
+    print("Full Bot with Admin Tools & Database is running...")
     app.run_polling(allowed_updates=["message", "chat_member"])
 
 if __name__ == '__main__':
